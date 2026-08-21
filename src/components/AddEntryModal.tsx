@@ -20,11 +20,16 @@ export function AddEntryModal({ kind, onClose, onSave }: Props) {
 
   useEffect(() => {
     inputRef.current?.focus()
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onKey)
+    }
   }, [onClose])
 
   async function handleSubmit(event: FormEvent) {
@@ -60,15 +65,18 @@ export function AddEntryModal({ kind, onClose, onSave }: Props) {
         onClick={(event) => event.stopPropagation()}
       >
         <h2 id={titleId}>{isCash ? 'Add cash' : 'Add expense'}</h2>
-        <p className="modal-copy">
-          Saved on this device immediately, then pushed to your SmartCB book.
-        </p>
+        <p className="modal-copy">Saved to this sheet in your SmartCB Drive folder.</p>
         <form onSubmit={handleSubmit}>
           <label htmlFor="amount">Amount</label>
           <input
             ref={inputRef}
             id="amount"
+            name="amount"
             inputMode="decimal"
+            enterKeyHint="next"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
             placeholder="0"
@@ -76,6 +84,9 @@ export function AddEntryModal({ kind, onClose, onSave }: Props) {
           <label htmlFor="description">Description</label>
           <input
             id="description"
+            name="description"
+            enterKeyHint="done"
+            autoComplete="off"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             placeholder={isCash ? 'e.g. UserC contri' : 'e.g. kirana'}

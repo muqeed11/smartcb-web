@@ -28,10 +28,7 @@ export function LoginPage({ onSignedIn }: Props) {
       <section className="login-card">
         <p className="eyebrow">Cash book</p>
         <h1>SmartCB</h1>
-        <p className="lede">
-          Sign in with Gmail. Entries save on this device first, then sync to your Drive folder named
-          SmartCB.
-        </p>
+        <p className="lede">Shows sheets from the SmartCB folder of your Google Drive.</p>
         <form className="login-form" onSubmit={handleSubmit}>
           <button type="submit" className="btn primary" disabled={busy}>
             {busy ? 'Opening Google…' : 'Sign in with Google'}

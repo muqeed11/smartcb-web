@@ -1,6 +1,6 @@
 # SmartCB
 
-Local-first cash book in the browser. Sign in with Gmail, add cash or expenses, and sync to Excel workbooks in a Google Drive folder named **SmartCB**. The spreadsheet stays in Drive — the app never presents it as Excel.
+Local-first cash book in the browser. Sign in with Gmail, choose an Excel workbook or Google Sheet from your Google Drive folder named **SmartCB**, then add cash or expenses. Entries save on this device first and sync back to that spreadsheet.
 
 **Live:** [https://muqeed11.github.io/smartcb-web/](https://muqeed11.github.io/smartcb-web/)
 
@@ -8,7 +8,8 @@ Local-first cash book in the browser. Sign in with Gmail, add cash or expenses, 
 
 1. Open the GitHub Pages URL.
 2. Sign in with Google and allow Drive access.
-3. Add cash / add expense. Entries save locally first, then upload to Drive.
+3. Pick an Excel workbook or Google Sheet from the Drive folder named **SmartCB**.
+4. Review cash in / cash out, then add cash or expenses. Entries save locally first, then upload to Drive.
 
 ## Google Cloud
 

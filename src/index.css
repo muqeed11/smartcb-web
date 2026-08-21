@@ -28,12 +28,29 @@ body,
 #root {
   margin: 0;
   min-height: 100%;
+  min-height: 100svh;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
   background:
     radial-gradient(circle at top, rgba(31, 107, 74, 0.08), transparent 28%),
     var(--paper);
+}
+
+button,
+a,
+input,
+select,
+.account-chip,
+.book-card,
+.sheet-tab {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(31, 107, 74, 0.14);
 }
 
 button,
@@ -114,6 +131,8 @@ select {
   border-radius: 12px;
   padding: 12px 14px;
   background: #fff;
+  font-size: 16px;
+  min-height: 44px;
 }
 
 .btn {
@@ -122,6 +141,7 @@ select {
   padding: 12px 18px;
   cursor: pointer;
   font-weight: 650;
+  min-height: 44px;
 }
 
 .btn:disabled {
@@ -151,6 +171,18 @@ select {
   padding: 8px 12px;
 }
 
+.btn.small {
+  margin-top: 0;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.topbar-right .btn.compact,
+.books-toolbar .btn.compact {
+  margin-top: 0;
+}
+
 .form-error {
   color: var(--expense);
   margin: 0;
@@ -178,22 +210,43 @@ select {
 .app-shell {
   width: min(920px, 100%);
   margin: 0 auto;
-  padding: 20px 16px 48px;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
 }
 
 .topbar {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 24px;
   position: relative;
+}
+
+.brand-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
 }
 
 .brand {
   display: flex;
   gap: 12px;
   align-items: center;
+  min-width: 0;
+}
+
+.brand-copy {
+  min-width: 0;
+}
+
+.brand-copy strong,
+.brand-copy p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .brand p,
@@ -220,6 +273,12 @@ select {
   gap: 12px;
   align-items: center;
   position: relative;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.brand-block .btn.compact {
+  margin-top: 0;
 }
 
 .book-picker span {
@@ -254,8 +313,8 @@ select {
   font-size: 12px;
 }
 
-.account-chip span:last-child {
-  max-width: 180px;
+.account-chip .user-email {
+  max-width: min(320px, 48vw);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -277,7 +336,8 @@ select {
 .account-menu button {
   width: 100%;
   text-align: left;
-  padding: 10px 12px;
+  padding: 12px 14px;
+  min-height: 44px;
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -289,7 +349,14 @@ select {
 
 .summary {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 1fr;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.summary-row,
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
@@ -306,8 +373,9 @@ select {
 }
 
 .balance-card h1 {
-  font-size: 42px;
+  font-size: clamp(32px, 10vw, 42px);
   margin: 6px 0 10px;
+  overflow-wrap: anywhere;
 }
 
 .sync {
@@ -339,14 +407,12 @@ select {
 .stat strong {
   display: block;
   margin-top: 8px;
-  font-size: 24px;
+  font-size: clamp(18px, 5.5vw, 24px);
   font-family: var(--serif);
+  overflow-wrap: anywhere;
 }
 
 .actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
   margin: 20px 0;
 }
 
@@ -383,10 +449,16 @@ select {
 .entry-list li {
   padding: 14px 16px;
   border-radius: 16px;
+  align-items: flex-start;
+}
+
+.entry-copy {
+  min-width: 0;
 }
 
 .entry-list strong {
   display: block;
+  overflow-wrap: anywhere;
 }
 
 .entry-list time,
@@ -398,6 +470,7 @@ select {
 .entry-amounts {
   text-align: right;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 2px;
 }
 
@@ -415,6 +488,7 @@ select {
 .modal-backdrop {
   position: fixed;
   inset: 0;
+  z-index: 40;
   background: rgba(28, 43, 34, 0.35);
   display: grid;
   place-items: center;
@@ -438,21 +512,356 @@ select {
   margin-top: 8px;
 }
 
+.books-intro h1 {
+  font-family: var(--serif);
+  font-size: 36px;
+  font-weight: 600;
+  margin: 8px 0 12px;
+}
+
+.books-intro .lede {
+  margin-bottom: 8px;
+}
+
+.books-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.books-toolbar h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.books-toolbar-actions {
+  display: flex;
+  margin-left: auto;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.book-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 28px;
+  display: grid;
+  gap: 10px;
+}
+
+.book-card {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.book-card:hover,
+.book-card:focus-visible {
+  border-color: var(--pine);
+}
+
+.book-card:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.book-icon.google {
+  background: #188038;
+}
+
+.book-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.book-copy strong,
+.book-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.book-copy span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.book-open {
+  color: var(--pine);
+  font-weight: 650;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.sheet-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin: 0 -12px 16px;
+  padding: 0 12px 4px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.sheet-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.sheet-tab {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 10px 14px;
+  min-height: 40px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.sheet-tab.active {
+  background: var(--pine);
+  border-color: var(--pine);
+  color: #fff;
+}
+
+.ledger-table-wrap {
+  overflow-x: auto;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.ledger-table th,
+.ledger-table td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.ledger-table th {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 650;
+  background: #f8f4ea;
+}
+
+.ledger-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.ledger-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 @media (max-width: 720px) {
-  .summary,
-  .actions,
-  .topbar,
-  .topbar-right {
-    display: grid;
-    grid-template-columns: 1fr;
+  .login-shell {
+    place-items: stretch;
+    align-content: center;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
   }
 
-  .account-chip span:last-child {
-    max-width: none;
+  .login-card {
+    padding: 24px 20px;
+    border-radius: 20px;
   }
 
-  .login-card h1,
-  .balance-card h1 {
+  .login-card h1 {
     font-size: 36px;
+  }
+
+  .login-form .btn {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .app-shell {
+    padding: max(10px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom));
+  }
+
+  .app-shell:has(.actions) {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom));
+  }
+
+  .topbar {
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .mark {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+  }
+
+  .brand-copy p {
+    max-width: 46vw;
+  }
+
+  .account-chip {
+    min-height: 40px;
+    padding: 4px 8px 4px 4px;
+  }
+
+  .account-chip .user-email {
+    max-width: min(42vw, 168px);
+    font-size: 12px;
+  }
+
+  .balance-card,
+  .stat {
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .summary-row,
+  .actions {
+    gap: 8px;
+  }
+
+  .actions {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    margin: 0;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: rgba(243, 239, 228, 0.96);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid var(--line);
+  }
+
+  .ledger-table-wrap {
+    display: none;
+  }
+
+  .sheet-tab {
+    min-height: 40px;
+  }
+
+  .actions .btn {
+    min-height: 48px;
+    font-size: 15px;
+  }
+
+  .history-head {
+    align-items: flex-start;
+  }
+
+  .history h2 {
+    font-size: 16px;
+  }
+
+  .banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .books-intro h1 {
+    font-size: 28px;
+  }
+
+  .books-toolbar {
+    align-items: center;
+  }
+
+  .books-toolbar-actions {
+    width: auto;
+    flex-shrink: 0;
+  }
+
+  .books-toolbar-actions .btn {
+    flex: 0 0 auto;
+    min-height: 32px;
+    width: auto;
+  }
+
+  .book-card {
+    grid-template-columns: auto 1fr;
+    gap: 12px;
+    min-height: 64px;
+    padding: 12px;
+  }
+
+  .book-open {
+    display: none;
+  }
+
+  .modal-backdrop {
+    place-items: end stretch;
+    padding: 0;
+    overscroll-behavior: contain;
+  }
+
+  .modal {
+    width: 100%;
+    max-width: none;
+    border-radius: 20px 20px 0 0;
+    padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+    box-shadow: 0 -12px 40px rgba(28, 43, 34, 0.16);
+  }
+
+  .modal::before {
+    content: "";
+    display: block;
+    width: 40px;
+    height: 4px;
+    margin: 4px auto 14px;
+    border-radius: 999px;
+    background: var(--line);
+  }
+
+  .modal-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .modal-actions .btn {
+    width: 100%;
+    min-height: 48px;
+  }
+}
+
+@media (min-width: 721px) {
+  .entry-list {
+    display: none;
+  }
+
+  .ledger-table-wrap {
+    display: block;
+  }
+
+  .sheet-tabs {
+    flex-wrap: wrap;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 0;
+    padding-right: 0;
+    overflow: visible;
   }
 }

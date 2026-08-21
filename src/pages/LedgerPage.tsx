@@ -1,14 +1,27 @@
 import { useMemo, useState } from 'react'
 import type { Session } from '../auth/googleAuth'
 import { AddEntryModal } from '../components/AddEntryModal'
-import { useCashBook, type SyncStatus } from '../hooks/useCashBook'
-import { bookLabel } from '../ledger/excel'
+import { AppHeader } from '../components/AppHeader'
+import type { SyncStatus } from '../hooks/useCashBook'
+import { bookLabel, type LedgerRow } from '../ledger/excel'
 
 type Props = {
   session: Session
+  bookName: string
+  sheetName: string | null
+  sheets: string[]
+  rows: LedgerRow[]
+  syncStatus: SyncStatus
+  syncError: string | null
+  loading: boolean
+  loadError: string | null
+  onChangeSheet: () => void
+  onSelectSheet: (name: string) => void
+  onAddEntry: (entry: { description: string; amount: number; kind: 'in' | 'out' }) => Promise<void>
+  onRetrySync: () => void
+  onReload: () => void
   onLogout: () => void
   onSwitchAccount: () => void
-  onAuthExpired: () => void
 }
 
 function money(value: number): string {
@@ -32,22 +45,25 @@ function syncLabel(status: SyncStatus): string {
   }
 }
 
-export function LedgerPage({ session, onLogout, onSwitchAccount, onAuthExpired }: Props) {
-  const {
-    books,
-    activeId,
-    rows,
-    syncStatus,
-    syncError,
-    loading,
-    loadError,
-    selectBook,
-    addEntry,
-    retrySync,
-    reload,
-  } = useCashBook(session, onAuthExpired)
+export function LedgerPage({
+  session,
+  bookName,
+  sheetName,
+  sheets,
+  rows,
+  syncStatus,
+  syncError,
+  loading,
+  loadError,
+  onChangeSheet,
+  onSelectSheet,
+  onAddEntry,
+  onRetrySync,
+  onReload,
+  onLogout,
+  onSwitchAccount,
+}: Props) {
   const [modal, setModal] = useState<'in' | 'out' | null>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
 
   const totals = useMemo(() => {
     const cashIn = rows.reduce((sum, row) => sum + row.cashIn, 0)
@@ -57,69 +73,50 @@ export function LedgerPage({ session, onLogout, onSwitchAccount, onAuthExpired }
   }, [rows])
 
   const reversed = useMemo(() => [...rows].reverse(), [rows])
-  const activeBook = books.find((book) => book.id === activeId)
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="mark">CB</span>
-          <div>
-            <strong>SmartCB</strong>
-            <p>Drive folder SmartCB</p>
-          </div>
-        </div>
-        <div className="topbar-right">
-          {books.length > 1 ? (
-            <label className="book-picker">
-              <span>Book</span>
-              <select
-                value={activeId ?? ''}
-                onChange={(event) => void selectBook(event.target.value)}
-              >
-                {books.map((book) => (
-                  <option key={book.id} value={book.id}>
-                    {bookLabel(book.name)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : activeBook ? (
-            <p className="book-name">{bookLabel(activeBook.name)}</p>
-          ) : null}
-          <button
-            type="button"
-            className="account-chip"
-            onClick={() => setMenuOpen((open) => !open)}
-            aria-expanded={menuOpen}
-          >
-            {session.picture ? (
-              <img src={session.picture} alt="" referrerPolicy="no-referrer" />
-            ) : (
-              <span className="avatar-fallback">{session.email.slice(0, 1).toUpperCase()}</span>
-            )}
-            <span>{session.email}</span>
+      <AppHeader
+        session={session}
+        subtitle={
+          sheetName && sheetName !== bookLabel(bookName)
+            ? `${bookLabel(bookName)} · ${sheetName}`
+            : bookLabel(bookName)
+        }
+        extra={
+          <button type="button" className="btn ghost compact" onClick={onChangeSheet}>
+            All sheets
           </button>
-          {menuOpen ? (
-            <div className="account-menu">
-              <button type="button" onClick={onSwitchAccount}>
-                Switch account
-              </button>
-              <button type="button" onClick={onLogout}>
-                Log out
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </header>
+        }
+        onLogout={onLogout}
+        onSwitchAccount={onSwitchAccount}
+      />
 
       <main className="ledger">
         {loadError ? (
           <div className="banner error">
             <p>{loadError}</p>
-            <button type="button" className="btn ghost" onClick={() => void reload()}>
+            <button type="button" className="btn ghost" onClick={onReload}>
               Try again
             </button>
+          </div>
+        ) : null}
+
+        {sheets.length > 1 ? (
+          <div className="sheet-tabs" role="tablist" aria-label="Worksheets">
+            {sheets.map((name) => (
+              <button
+                key={name}
+                type="button"
+                role="tab"
+                aria-selected={name === sheetName}
+                className={name === sheetName ? 'sheet-tab active' : 'sheet-tab'}
+                onClick={() => onSelectSheet(name)}
+                disabled={loading}
+              >
+                {name}
+              </button>
+            ))}
           </div>
         ) : null}
 
@@ -129,20 +126,22 @@ export function LedgerPage({ session, onLogout, onSwitchAccount, onAuthExpired }
             <h1>{money(totals.balance)}</h1>
             <p className={`sync sync-${syncStatus}`}>{syncLabel(syncStatus)}</p>
             {syncStatus === 'error' ? (
-              <button type="button" className="btn ghost compact" onClick={() => void retrySync()}>
+              <button type="button" className="btn ghost compact" onClick={onRetrySync}>
                 Retry sync
               </button>
             ) : null}
             {syncError ? <p className="form-error">{syncError}</p> : null}
           </article>
-          <article className="stat">
-            <p>Cash in</p>
-            <strong className="positive">{money(totals.cashIn)}</strong>
-          </article>
-          <article className="stat">
-            <p>Expenses</p>
-            <strong className="negative">{money(totals.cashOut)}</strong>
-          </article>
+          <div className="summary-row">
+            <article className="stat">
+              <p>Cash in</p>
+              <strong className="positive">{money(totals.cashIn)}</strong>
+            </article>
+            <article className="stat">
+              <p>Expenses</p>
+              <strong className="negative">{money(totals.cashOut)}</strong>
+            </article>
+          </div>
         </section>
 
         <section className="actions">
@@ -161,33 +160,65 @@ export function LedgerPage({ session, onLogout, onSwitchAccount, onAuthExpired }
 
         <section className="history">
           <div className="history-head">
-            <h2>Activity</h2>
-            {loading ? <span className="muted">Loading…</span> : <span className="muted">{rows.length} entries</span>}
+            <h2>Cash in / cash out</h2>
+            {loading ? (
+              <span className="muted">Reading sheet…</span>
+            ) : (
+              <span className="muted">{rows.length} transactions</span>
+            )}
           </div>
           {reversed.length === 0 && !loading ? (
-            <p className="empty">No entries yet. Add cash or an expense to start this book.</p>
+            <p className="empty">No transactions in this sheet yet. Add cash or an expense.</p>
           ) : (
-            <ul className="entry-list">
-              {reversed.map((row, index) => (
-                <li key={`${row.date}-${row.description}-${index}`}>
-                  <div>
-                    <strong>{row.description || '—'}</strong>
-                    <time>{row.date}</time>
-                  </div>
-                  <div className="entry-amounts">
-                    {row.cashIn > 0 ? <span className="positive">+{money(row.cashIn)}</span> : null}
-                    {row.cashOut > 0 ? <span className="negative">−{money(row.cashOut)}</span> : null}
-                    <span className="bal">Bal {money(row.balance)}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="entry-list">
+                {reversed.map((row, index) => (
+                  <li key={`${row.date}-${row.description}-${index}`}>
+                    <div className="entry-copy">
+                      <strong>{row.description || '—'}</strong>
+                      <time>{row.date}</time>
+                    </div>
+                    <div className="entry-amounts">
+                      {row.cashIn > 0 ? <span className="positive">+{money(row.cashIn)}</span> : null}
+                      {row.cashOut > 0 ? <span className="negative">−{money(row.cashOut)}</span> : null}
+                      <span className="bal">Bal {money(row.balance)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="ledger-table-wrap">
+                <table className="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Description</th>
+                      <th className="num">Cash in</th>
+                      <th className="num">Cash out</th>
+                      <th className="num">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reversed.map((row, index) => (
+                      <tr key={`${row.date}-${row.description}-${index}`}>
+                        <td>
+                          <time>{row.date}</time>
+                        </td>
+                        <td>{row.description || '—'}</td>
+                        <td className="num positive">{row.cashIn > 0 ? money(row.cashIn) : ''}</td>
+                        <td className="num negative">{row.cashOut > 0 ? money(row.cashOut) : ''}</td>
+                        <td className="num bal">{money(row.balance)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </section>
       </main>
 
       {modal ? (
-        <AddEntryModal kind={modal} onClose={() => setModal(null)} onSave={addEntry} />
+        <AddEntryModal kind={modal} onClose={() => setModal(null)} onSave={onAddEntry} />
       ) : null}
     </div>
   )

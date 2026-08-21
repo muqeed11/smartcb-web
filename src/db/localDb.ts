@@ -9,6 +9,7 @@ export type CachedBook = {
   rows: LedgerRow[]
   dirty: boolean
   lastSyncedAt: number | null
+  sheetName?: string
 }
 
 class SmartCBDatabase extends Dexie {

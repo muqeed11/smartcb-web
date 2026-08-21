@@ -1,5 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { logout, restoreSession, switchAccount, type Session } from './auth/googleAuth'
+import { useCashBook } from './hooks/useCashBook'
+import { BooksPage } from './pages/BooksPage'
 import { LoginPage } from './pages/LoginPage'
 
 const LedgerPage = lazy(async () => {
@@ -51,18 +53,69 @@ export default function App() {
   }
 
   return (
+    <SignedInApp
+      session={session}
+      onLogout={() => void handleLogout()}
+      onSwitchAccount={() => void handleSwitch()}
+      onAuthExpired={() => void handleLogout()}
+    />
+  )
+}
+
+type SignedInProps = {
+  session: Session
+  onLogout: () => void
+  onSwitchAccount: () => void
+  onAuthExpired: () => void
+}
+
+function SignedInApp({ session, onLogout, onSwitchAccount, onAuthExpired }: SignedInProps) {
+  const book = useCashBook(session, onAuthExpired)
+  const activeId = book.activeId
+  const activeBook = book.books.find((item) => item.id === activeId)
+
+  if (!activeId) {
+    return (
+      <BooksPage
+        session={session}
+        books={book.books}
+        lastBookId={book.lastBookId}
+        listing={book.listing}
+        loadError={book.loadError}
+        onSelect={(fileId) => void book.selectBook(fileId)}
+        onCreate={book.createNewBook}
+        onReload={() => void book.reload()}
+        onLogout={onLogout}
+        onSwitchAccount={onSwitchAccount}
+      />
+    )
+  }
+
+  return (
     <Suspense
       fallback={
         <main className="login-shell">
-          <p className="muted">Opening your cash book…</p>
+          <p className="muted">Opening {activeBook?.name ?? 'your cash book'}…</p>
         </main>
       }
     >
       <LedgerPage
         session={session}
-        onLogout={() => void handleLogout()}
-        onSwitchAccount={() => void handleSwitch()}
-        onAuthExpired={() => void handleLogout()}
+        bookName={activeBook?.name ?? 'Cash Book.xlsx'}
+        sheetName={book.activeSheet}
+        sheets={book.sheets}
+        rows={book.rows}
+        syncStatus={book.syncStatus}
+        syncError={book.syncError}
+        loading={book.loading}
+        loadError={book.loadError}
+        onChangeSheet={book.closeBook}
+        onSelectSheet={(name) => void book.selectSheet(name)}
+        onAddEntry={book.addEntry}
+        onRetrySync={() => void book.retrySync()}
+        onReload={() => void book.selectBook(activeId)}
+        onLogout={onLogout}
+        onSwitchAccount={onSwitchAccount}
       />
     </Suspense>
   )

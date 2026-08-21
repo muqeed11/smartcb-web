@@ -51,9 +51,18 @@ export function recomputeBalances(rows: LedgerRow[]): LedgerRow[] {
   })
 }
 
-export function parseWorkbook(buffer: ArrayBuffer): LedgerRow[] {
+export function listSheetNames(buffer: ArrayBuffer): string[] {
+  const workbook = XLSX.read(buffer, { type: 'array' })
+  return workbook.SheetNames.filter(Boolean)
+}
+
+export function parseWorkbook(buffer: ArrayBuffer, sheetName?: string): LedgerRow[] {
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
-  const sheet = workbook.Sheets[workbook.SheetNames[0] ?? '']
+  const name =
+    sheetName && workbook.SheetNames.includes(sheetName)
+      ? sheetName
+      : (workbook.SheetNames[0] ?? '')
+  const sheet = workbook.Sheets[name]
   if (!sheet) return []
 
   const table = XLSX.utils.sheet_to_json<(string | number | Date | null)[]>(sheet, {
@@ -88,17 +97,30 @@ export function parseWorkbook(buffer: ArrayBuffer): LedgerRow[] {
   return recomputeBalances(rows)
 }
 
-export function serializeWorkbook(rows: LedgerRow[]): Uint8Array {
+export function serializeWorkbook(
+  rows: LedgerRow[],
+  previous?: ArrayBuffer | null,
+  sheetName = 'Ledger',
+): Uint8Array {
   const table = [
     ['Date', 'Description', 'Cash In', 'Cash Out', 'Balance'],
     ...rows.map((row) => [row.date, row.description, row.cashIn, row.cashOut, row.balance]),
   ]
   const sheet = XLSX.utils.aoa_to_sheet(table)
   sheet['!cols'] = [{ wch: 22 }, { wch: 32 }, { wch: 12 }, { wch: 12 }, { wch: 12 }]
-  const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, sheet, 'Ledger')
+  const workbook = previous ? XLSX.read(previous, { type: 'array' }) : XLSX.utils.book_new()
+  workbook.Sheets[sheetName] = sheet
+  if (!workbook.SheetNames.includes(sheetName)) {
+    workbook.SheetNames.push(sheetName)
+  }
   const output = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer | Uint8Array
   return output instanceof Uint8Array ? output : new Uint8Array(output)
+}
+
+export function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(buffer).set(bytes)
+  return buffer
 }
 
 export function bookLabel(fileName: string): string {
