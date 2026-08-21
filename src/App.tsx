@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { logout, restoreSession, switchAccount, type Session } from './auth/googleAuth'
+import { DriveLoader } from './components/DriveLoader'
 import { useCashBook } from './hooks/useCashBook'
 import { BooksPage } from './pages/BooksPage'
 import { LoginPage } from './pages/LoginPage'
@@ -41,11 +42,7 @@ export default function App() {
   }
 
   if (booting) {
-    return (
-      <main className="login-shell">
-        <p className="muted">Opening SmartCB…</p>
-      </main>
-    )
+    return <DriveLoader overlay label="Opening SmartCB" />
   }
 
   if (!session) {
@@ -93,11 +90,7 @@ function SignedInApp({ session, onLogout, onSwitchAccount, onAuthExpired }: Sign
 
   return (
     <Suspense
-      fallback={
-        <main className="login-shell">
-          <p className="muted">Opening {activeBook?.name ?? 'your cash book'}…</p>
-        </main>
-      }
+      fallback={<DriveLoader overlay label="Loading from Drive" />}
     >
       <LedgerPage
         session={session}

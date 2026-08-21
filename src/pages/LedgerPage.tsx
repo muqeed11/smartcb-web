@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Session } from '../auth/googleAuth'
 import { AddEntryModal } from '../components/AddEntryModal'
 import { AppHeader } from '../components/AppHeader'
+import { DriveLoader } from '../components/DriveLoader'
 import type { SyncStatus } from '../hooks/useCashBook'
 import { bookLabel, type LedgerRow } from '../ledger/excel'
 
@@ -122,9 +123,11 @@ export function LedgerPage({
 
         <section className="summary">
           <article className="balance-card">
-            <p>Current balance</p>
+            <div className="balance-head">
+              <p>Current balance</p>
+              <p className={`sync sync-${syncStatus}`}>{syncLabel(syncStatus)}</p>
+            </div>
             <h1>{money(totals.balance)}</h1>
-            <p className={`sync sync-${syncStatus}`}>{syncLabel(syncStatus)}</p>
             {syncStatus === 'error' ? (
               <button type="button" className="btn ghost compact" onClick={onRetrySync}>
                 Retry sync
@@ -159,14 +162,6 @@ export function LedgerPage({
         </section>
 
         <section className="history">
-          <div className="history-head">
-            <h2>Cash in / cash out</h2>
-            {loading ? (
-              <span className="muted">Reading sheet…</span>
-            ) : (
-              <span className="muted">{rows.length} transactions</span>
-            )}
-          </div>
           {reversed.length === 0 && !loading ? (
             <p className="empty">No transactions in this sheet yet. Add cash or an expense.</p>
           ) : (
@@ -216,6 +211,8 @@ export function LedgerPage({
           )}
         </section>
       </main>
+
+      {loading && !loadError ? <DriveLoader overlay label="Loading from Drive" /> : null}
 
       {modal ? (
         <AddEntryModal kind={modal} onClose={() => setModal(null)} onSave={onAddEntry} />

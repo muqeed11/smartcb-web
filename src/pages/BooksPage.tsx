@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Session } from '../auth/googleAuth'
 import { AppHeader } from '../components/AppHeader'
 import { CreateBookModal } from '../components/CreateBookModal'
+import { DriveLoader } from '../components/DriveLoader'
 import { bookKind, isGoogleSheet, type DriveBook } from '../drive/driveApi'
 import { bookLabel } from '../ledger/excel'
 
@@ -64,11 +65,7 @@ export function BooksPage({
         ) : null}
 
         <section className="books-toolbar">
-          <h2>
-            {listing
-              ? 'Reading SmartCB…'
-              : `${books.length} ${books.length === 1 ? 'sheet' : 'sheets'}`}
-          </h2>
+          <h2>{`${books.length} ${books.length === 1 ? 'sheet' : 'sheets'}`}</h2>
           <div className="books-toolbar-actions">
             <button
               type="button"
@@ -81,9 +78,7 @@ export function BooksPage({
           </div>
         </section>
 
-        {listing && books.length === 0 ? (
-          <p className="muted">Looking for sheets in SmartCB…</p>
-        ) : ordered.length === 0 ? (
+        {ordered.length === 0 ? (
           <p className="empty">No sheets in the SmartCB folder yet. Tap + New CB to create one.</p>
         ) : (
           <ul className="book-list">
@@ -114,6 +109,8 @@ export function BooksPage({
           </ul>
         )}
       </main>
+
+      {listing && !loadError ? <DriveLoader overlay label="Loading from Drive" /> : null}
 
       {createOpen ? (
         <CreateBookModal busy={listing} onClose={() => setCreateOpen(false)} onCreate={onCreate} />
