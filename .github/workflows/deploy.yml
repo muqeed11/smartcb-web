@@ -25,6 +25,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          VITE_GOOGLE_CLIENT_ID: 517810463661-jasm5nolp2ie75cic0fl9acts0sb5nek.apps.googleusercontent.com
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

@@ -6,6 +6,8 @@ export const SCOPES = [
 
 const CLIENT_ID_KEY = 'smartcb.googleClientId'
 const SESSION_KEY = 'smartcb.session'
+const DEFAULT_CLIENT_ID =
+  '517810463661-jasm5nolp2ie75cic0fl9acts0sb5nek.apps.googleusercontent.com'
 
 export type Session = {
   email: string
@@ -18,7 +20,9 @@ export type Session = {
 export function getClientId(): string {
   const fromEnv = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
   if (fromEnv) return fromEnv
-  return localStorage.getItem(CLIENT_ID_KEY)?.trim() ?? ''
+  const fromStorage = localStorage.getItem(CLIENT_ID_KEY)?.trim()
+  if (fromStorage) return fromStorage
+  return DEFAULT_CLIENT_ID
 }
 
 export function saveClientId(id: string): void {
