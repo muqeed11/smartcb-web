@@ -1,11 +1,12 @@
 export const SCOPES = [
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
-  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/drive.file',
 ].join(' ')
 
 const CLIENT_ID_KEY = 'smartcb.googleClientId'
-const SESSION_KEY = 'smartcb.session'
+const SESSION_KEY = 'smartcb.session.v2'
+const LEGACY_SESSION_KEY = 'smartcb.session'
 const DEFAULT_CLIENT_ID =
   '517810463661-jasm5nolp2ie75cic0fl9acts0sb5nek.apps.googleusercontent.com'
 
@@ -17,6 +18,15 @@ export type Session = {
   expiresAt: number
 }
 
+type TokenPrompt = '' | 'none' | 'consent' | 'select_account'
+
+export class AuthExpiredError extends Error {
+  constructor() {
+    super('Google sign-in expired')
+    this.name = 'AuthExpiredError'
+  }
+}
+
 export function getClientId(): string {
   const fromEnv = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
   if (fromEnv) return fromEnv
@@ -25,13 +35,21 @@ export function getClientId(): string {
   return DEFAULT_CLIENT_ID
 }
 
+export function getProjectNumber(): string {
+  return getClientId().split('-')[0] ?? ''
+}
+
+export function getPickerApiKey(): string {
+  return import.meta.env.VITE_GOOGLE_API_KEY?.trim() ?? ''
+}
+
 export function saveClientId(id: string): void {
   localStorage.setItem(CLIENT_ID_KEY, id.trim())
 }
 
 export function getSession(): Session | null {
   try {
-    const raw = localStorage.getItem(SESSION_KEY)
+    const raw = localStorage.getItem(SESSION_KEY) ?? localStorage.getItem(LEGACY_SESSION_KEY)
     if (!raw) return null
     const session = JSON.parse(raw) as Session
     if (!session.accessToken || !session.email) return null
@@ -42,15 +60,17 @@ export function getSession(): Session | null {
 }
 
 export function isTokenFresh(session: Session, skewMs = 60_000): boolean {
-  return Date.now() + skewMs < session.expiresAt
+  return Number.isFinite(session.expiresAt) && Date.now() + skewMs < session.expiresAt
 }
 
 function saveSession(session: Session): void {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+  localStorage.removeItem(LEGACY_SESSION_KEY)
 }
 
 export function clearSession(): void {
   localStorage.removeItem(SESSION_KEY)
+  localStorage.removeItem(LEGACY_SESSION_KEY)
 }
 
 function loadGis(): Promise<void> {
@@ -87,7 +107,13 @@ async function fetchProfile(accessToken: string): Promise<Pick<Session, 'email' 
   }
 }
 
-function requestToken(prompt: '' | 'consent' | 'select_account'): Promise<GoogleTokenResponse> {
+function expiryMs(expiresIn?: number): number {
+  const seconds = Number(expiresIn)
+  if (!Number.isFinite(seconds) || seconds <= 0) return 3600 * 1000
+  return seconds * 1000
+}
+
+function requestToken(prompt: TokenPrompt, hint?: string): Promise<GoogleTokenResponse> {
   return new Promise((resolve, reject) => {
     void (async () => {
       try {
@@ -105,6 +131,8 @@ function requestToken(prompt: '' | 'consent' | 'select_account'): Promise<Google
         const client = oauth.initTokenClient({
           client_id: clientId,
           scope: SCOPES,
+          hint,
+          include_granted_scopes: true,
           callback: (response) => {
             if (response.error) {
               reject(new Error(response.error_description || response.error))
@@ -124,33 +152,55 @@ function requestToken(prompt: '' | 'consent' | 'select_account'): Promise<Google
   })
 }
 
-export async function signIn(prompt: '' | 'consent' | 'select_account' = 'consent'): Promise<Session> {
-  const token = await requestToken(prompt)
-  if (!token.access_token) throw new Error('No access token returned')
-  const profile = await fetchProfile(token.access_token)
-  const session: Session = {
-    ...profile,
-    accessToken: token.access_token,
-    expiresAt: Date.now() + (token.expires_in ?? 3600) * 1000,
-  }
-  saveSession(session)
+let tokenRequest: Promise<Session> | null = null
+let restorePromise: Promise<Session | null> | null = null
+
+async function obtainSession(prompt: TokenPrompt, existing?: Session | null): Promise<Session> {
+  if (tokenRequest) return tokenRequest
+  tokenRequest = (async () => {
+    const token = await requestToken(prompt, existing?.email)
+    if (!token.access_token) throw new Error('No access token returned')
+    const profile = existing?.email
+      ? { email: existing.email, name: existing.name, picture: existing.picture }
+      : await fetchProfile(token.access_token)
+    const session: Session = {
+      ...profile,
+      accessToken: token.access_token,
+      expiresAt: Date.now() + expiryMs(token.expires_in),
+    }
+    saveSession(session)
+    return session
+  })().finally(() => {
+    tokenRequest = null
+  })
+  return tokenRequest
+}
+
+export async function signIn(prompt: Exclude<TokenPrompt, 'none'> = 'select_account'): Promise<Session> {
+  const session = await obtainSession(prompt, getSession())
+  restorePromise = Promise.resolve(session)
   return session
 }
 
 export async function restoreSession(): Promise<Session | null> {
-  const existing = getSession()
-  if (!existing) return null
-  if (isTokenFresh(existing)) return existing
-  try {
-    return await signIn('')
-  } catch {
-    clearSession()
-    return null
+  if (!restorePromise) {
+    restorePromise = (async () => {
+      const existing = getSession()
+      if (!existing) return null
+      if (isTokenFresh(existing)) return existing
+      try {
+        return await obtainSession('none', existing)
+      } catch {
+        return null
+      }
+    })()
   }
+  return restorePromise
 }
 
 export async function logout(): Promise<void> {
   const session = getSession()
+  restorePromise = null
   clearSession()
   if (session?.accessToken) {
     try {
@@ -172,6 +222,10 @@ export async function switchAccount(): Promise<Session> {
 
 export async function ensureFreshToken(): Promise<Session> {
   const existing = getSession()
-  if (existing && isTokenFresh(existing, 120_000)) return existing
-  return signIn('')
+  if (existing && isTokenFresh(existing, 60_000)) return existing
+  try {
+    return await obtainSession('none', existing)
+  } catch {
+    throw new AuthExpiredError()
+  }
 }

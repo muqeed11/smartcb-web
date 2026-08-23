@@ -14,6 +14,7 @@ type Props = {
   loadError: string | null
   onSelect: (fileId: string) => void
   onCreate: (name: string) => Promise<void>
+  onImportFromDrive: () => Promise<void>
   onReload: () => void
   onLogout: () => void
   onSwitchAccount: () => void
@@ -35,11 +36,14 @@ export function BooksPage({
   loadError,
   onSelect,
   onCreate,
+  onImportFromDrive,
   onReload,
   onLogout,
   onSwitchAccount,
 }: Props) {
   const [createOpen, setCreateOpen] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
 
   const ordered = useMemo(() => {
     if (!lastBookId) return books
@@ -64,9 +68,27 @@ export function BooksPage({
           </div>
         ) : null}
 
+        {importError ? <p className="form-error">{importError}</p> : null}
+
         <section className="books-toolbar">
           <h2>{`${books.length} ${books.length === 1 ? 'sheet' : 'sheets'}`}</h2>
           <div className="books-toolbar-actions">
+            <button
+              type="button"
+              className="btn ghost small"
+              onClick={() => {
+                setImportError(null)
+                setImporting(true)
+                void onImportFromDrive()
+                  .catch((error) => {
+                    setImportError(error instanceof Error ? error.message : 'Could not open Drive')
+                  })
+                  .finally(() => setImporting(false))
+              }}
+              disabled={listing || importing}
+            >
+              {importing ? 'Opening Drive…' : 'From Drive'}
+            </button>
             <button
               type="button"
               className="btn primary small"
@@ -79,7 +101,10 @@ export function BooksPage({
         </section>
 
         {ordered.length === 0 ? (
-          <p className="empty">No sheets in the SmartCB folder yet. Tap + New CB to create one.</p>
+          <p className="empty">
+            No sheets yet. Tap + New CB to create one, or From Drive to open an existing Excel file or
+            Google Sheet.
+          </p>
         ) : (
           <ul className="book-list">
             {ordered.map((book) => (

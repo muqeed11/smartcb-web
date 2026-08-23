@@ -27,6 +27,7 @@ jobs:
       - run: npm run build
         env:
           VITE_GOOGLE_CLIENT_ID: 517810463661-jasm5nolp2ie75cic0fl9acts0sb5nek.apps.googleusercontent.com
+          VITE_GOOGLE_API_KEY: ${{ secrets.VITE_GOOGLE_API_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

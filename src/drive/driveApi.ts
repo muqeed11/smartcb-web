@@ -3,8 +3,8 @@ import { serializeWorkbook, type LedgerRow } from '../ledger/excel'
 const DRIVE = 'https://www.googleapis.com/drive/v3'
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3'
 export const SMARTCB_FOLDER = 'SmartCB'
-const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-const XLS_MIME = 'application/vnd.ms-excel'
+export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+export const XLS_MIME = 'application/vnd.ms-excel'
 export const GOOGLE_SHEET_MIME = 'application/vnd.google-apps.spreadsheet'
 const SHORTCUT_MIME = 'application/vnd.google-apps.shortcut'
 
@@ -158,6 +158,14 @@ export async function downloadBook(token: string, fileId: string, mimeType?: str
     : `${DRIVE}/files/${fileId}?alt=media`
   const res = await driveFetch(token, url)
   return res.arrayBuffer()
+}
+
+export async function getBook(token: string, fileId: string): Promise<DriveBook> {
+  const res = await driveFetch(
+    token,
+    `${DRIVE}/files/${fileId}?fields=id,name,mimeType,modifiedTime&supportsAllDrives=true`,
+  )
+  return (await res.json()) as DriveBook
 }
 
 export async function createBook(

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { signIn, type Session } from '../auth/googleAuth'
+import { getSession, signIn, type Session } from '../auth/googleAuth'
 
 type Props = {
   onSignedIn: (session: Session) => void
@@ -14,7 +14,7 @@ export function LoginPage({ onSignedIn }: Props) {
     setError(null)
     setBusy(true)
     try {
-      const session = await signIn('select_account')
+      const session = await signIn(getSession()?.email ? '' : 'select_account')
       onSignedIn(session)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed')
@@ -35,6 +35,9 @@ export function LoginPage({ onSignedIn }: Props) {
           </button>
           {error ? <p className="form-error">{error}</p> : null}
         </form>
+        <p className="login-privacy">
+          <a href="./privacy.html">Privacy policy</a>
+        </p>
       </section>
     </main>
   )

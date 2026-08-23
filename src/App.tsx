@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { logout, restoreSession, switchAccount, type Session } from './auth/googleAuth'
+import { clearSession, logout, restoreSession, switchAccount, type Session } from './auth/googleAuth'
 import { DriveLoader } from './components/DriveLoader'
 import { useCashBook } from './hooks/useCashBook'
 import { BooksPage } from './pages/BooksPage'
@@ -54,7 +54,10 @@ export default function App() {
       session={session}
       onLogout={() => void handleLogout()}
       onSwitchAccount={() => void handleSwitch()}
-      onAuthExpired={() => void handleLogout()}
+      onAuthExpired={() => {
+        clearSession()
+        setSession(null)
+      }}
     />
   )
 }
@@ -81,6 +84,7 @@ function SignedInApp({ session, onLogout, onSwitchAccount, onAuthExpired }: Sign
         loadError={book.loadError}
         onSelect={(fileId) => void book.selectBook(fileId)}
         onCreate={book.createNewBook}
+        onImportFromDrive={book.importFromDrive}
         onReload={() => void book.reload()}
         onLogout={onLogout}
         onSwitchAccount={onSwitchAccount}

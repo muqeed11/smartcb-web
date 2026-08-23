@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ensureFreshToken, type Session } from '../auth/googleAuth'
+import { AuthExpiredError, ensureFreshToken, type Session } from '../auth/googleAuth'
 import { getCachedBook, saveCachedBook } from '../db/localDb'
 import {
   createBook,
   downloadBook,
   DriveAuthError,
   findOrCreateFolder,
+  getBook,
   listBooks,
   uploadBook,
   type DriveBook,
 } from '../drive/driveApi'
+import { pickWorkbooks } from '../drive/picker'
 import {
   bytesToArrayBuffer,
   formatDateTime,
@@ -26,6 +28,42 @@ const LAST_BOOK_KEY = 'smartcb.lastBookId'
 
 function lastBookKey(email: string): string {
   return `${LAST_BOOK_KEY}.${email}`
+}
+
+function pickedKey(email: string): string {
+  return `smartcb.pickedFileIds.${email}`
+}
+
+function loadPickedIds(email: string): string[] {
+  try {
+    const raw = localStorage.getItem(pickedKey(email))
+    const parsed = raw ? (JSON.parse(raw) as unknown) : []
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function savePickedIds(email: string, ids: string[]): void {
+  localStorage.setItem(pickedKey(email), JSON.stringify([...new Set(ids)]))
+}
+
+function mergeBooks(current: DriveBook[], extra: DriveBook[]): DriveBook[] {
+  const byId = new Map(current.map((book) => [book.id, book]))
+  for (const book of extra) byId.set(book.id, book)
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+async function loadPickedBooks(token: string, email: string): Promise<DriveBook[]> {
+  const books: DriveBook[] = []
+  for (const fileId of loadPickedIds(email)) {
+    try {
+      books.push(await getBook(token, fileId))
+    } catch {
+      // Picked file may have been deleted or access revoked.
+    }
+  }
+  return books
 }
 
 function withXlsx(name: string): string {
@@ -69,7 +107,7 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
   }, [])
 
   const handleAuthError = useCallback((error: unknown) => {
-    if (error instanceof DriveAuthError) {
+    if (error instanceof DriveAuthError || error instanceof AuthExpiredError) {
       onAuthExpiredRef.current()
       return true
     }
@@ -194,7 +232,10 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
       const folder = await findOrCreateFolder(fresh.accessToken)
       setFolderId(folder)
       folderRef.current = folder
-      const listed = await listBooks(fresh.accessToken, folder)
+      const listed = mergeBooks(
+        await listBooks(fresh.accessToken, folder),
+        await loadPickedBooks(fresh.accessToken, fresh.email),
+      )
       setBooks(listed)
       booksRef.current = listed
       setLastBookId(localStorage.getItem(lastBookKey(fresh.email)))
@@ -259,13 +300,24 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
       setFolderId(folder)
       folderRef.current = folder
       const created = await createBook(fresh.accessToken, folder, withXlsx(rawName))
-      const listed = [...booksRef.current, created]
+      const listed = mergeBooks(booksRef.current, [created])
       setBooks(listed)
       booksRef.current = listed
       await selectBook(created.id)
     },
     [selectBook, session],
   )
+
+  const importFromDrive = useCallback(async () => {
+    if (!session) return
+    const fresh = await ensureFreshToken()
+    const picked = await pickWorkbooks(fresh.accessToken)
+    if (picked.length === 0) return
+    savePickedIds(fresh.email, [...loadPickedIds(fresh.email), ...picked.map((book) => book.id)])
+    const listed = mergeBooks(booksRef.current, picked)
+    setBooks(listed)
+    booksRef.current = listed
+  }, [session])
 
   const closeBook = useCallback(() => {
     setActiveId(null)
@@ -338,6 +390,7 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
     selectBook,
     selectSheet,
     createNewBook,
+    importFromDrive,
     closeBook,
     addEntry,
     retrySync: pushToDrive,
