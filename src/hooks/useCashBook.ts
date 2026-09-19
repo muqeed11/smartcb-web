@@ -350,20 +350,10 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
     [persistLocal, pushToDrive],
   )
 
-  const addEntry = useCallback(
-    async (entry: { description: string; amount: number; kind: 'in' | 'out' }) => {
+  const commitRows = useCallback(
+    async (next: LedgerRow[]) => {
       const fileId = activeRef.current
       if (!fileId) return
-      const next = recomputeBalances([
-        ...rowsRef.current,
-        {
-          date: formatDateTime(),
-          description: entry.description.trim(),
-          cashIn: entry.kind === 'in' ? entry.amount : 0,
-          cashOut: entry.kind === 'out' ? entry.amount : 0,
-          balance: 0,
-        },
-      ])
       setRows(next)
       sourceRef.current = bytesToArrayBuffer(
         serializeWorkbook(next, sourceRef.current, sheetRef.current ?? 'Ledger'),
@@ -373,6 +363,46 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
       scheduleSync()
     },
     [persistLocal, scheduleSync],
+  )
+
+  const addEntry = useCallback(
+    async (entry: { description: string; amount: number; kind: 'in' | 'out' }) => {
+      await commitRows(
+        recomputeBalances([
+          ...rowsRef.current,
+          {
+            date: formatDateTime(),
+            description: entry.description.trim(),
+            cashIn: entry.kind === 'in' ? entry.amount : 0,
+            cashOut: entry.kind === 'out' ? entry.amount : 0,
+            balance: 0,
+          },
+        ]),
+      )
+    },
+    [commitRows],
+  )
+
+  const updateLatest = useCallback(
+    async (entry: { description: string; amount: number; kind: 'in' | 'out' }) => {
+      const current = rowsRef.current
+      if (current.length === 0) return
+      const last = current.at(-1)
+      if (!last) return
+      await commitRows(
+        recomputeBalances([
+          ...current.slice(0, -1),
+          {
+            date: last.date,
+            description: entry.description.trim(),
+            cashIn: entry.kind === 'in' ? entry.amount : 0,
+            cashOut: entry.kind === 'out' ? entry.amount : 0,
+            balance: 0,
+          },
+        ]),
+      )
+    },
+    [commitRows],
   )
 
   return {
@@ -393,6 +423,7 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
     importFromDrive,
     closeBook,
     addEntry,
+    updateLatest,
     retrySync: pushToDrive,
     reload: bootstrap,
   }

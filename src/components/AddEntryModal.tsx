@@ -2,21 +2,26 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 type Kind = 'in' | 'out'
 
+export type EntryDraft = { description: string; amount: number; kind: Kind }
+
 type Props = {
   kind: Kind
+  mode?: 'add' | 'edit'
+  initial?: { description: string; amount: number }
   onClose: () => void
-  onSave: (entry: { description: string; amount: number; kind: Kind }) => Promise<void>
+  onSave: (entry: EntryDraft) => Promise<void>
 }
 
-export function AddEntryModal({ kind, onClose, onSave }: Props) {
+export function AddEntryModal({ kind, mode = 'add', initial, onClose, onSave }: Props) {
   const titleId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
-  const [description, setDescription] = useState('')
-  const [amount, setAmount] = useState('')
+  const [description, setDescription] = useState(initial?.description ?? '')
+  const [amount, setAmount] = useState(initial?.amount != null ? String(initial.amount) : '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const isCash = kind === 'in'
+  const isEdit = mode === 'edit'
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -64,8 +69,14 @@ export function AddEntryModal({ kind, onClose, onSave }: Props) {
         aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
-        <h2 id={titleId}>{isCash ? 'Add cash' : 'Add expense'}</h2>
-        <p className="modal-copy">Saved to this sheet in your SmartCB Drive folder.</p>
+        <h2 id={titleId}>
+          {isEdit ? (isCash ? 'Edit cash' : 'Edit expense') : isCash ? 'Add cash' : 'Add expense'}
+        </h2>
+        <p className="modal-copy">
+          {isEdit
+            ? 'Updates the latest entry in this sheet. The original date is kept.'
+            : 'Saved to this sheet in your SmartCB Drive folder.'}
+        </p>
         <form onSubmit={handleSubmit}>
           <label htmlFor="amount">Amount</label>
           <input
@@ -97,7 +108,7 @@ export function AddEntryModal({ kind, onClose, onSave }: Props) {
               Cancel
             </button>
             <button type="submit" className={`btn ${isCash ? 'cash' : 'expense'}`} disabled={busy}>
-              {busy ? 'Saving…' : isCash ? 'Save cash' : 'Save expense'}
+              {busy ? 'Saving…' : isEdit ? 'Save changes' : isCash ? 'Save cash' : 'Save expense'}
             </button>
           </div>
         </form>

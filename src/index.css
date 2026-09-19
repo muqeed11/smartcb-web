@@ -495,6 +495,21 @@ select {
   min-width: 0;
 }
 
+.entry-edit {
+  margin-top: 8px;
+}
+
+.desc-with-edit {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.desc-with-edit span {
+  overflow-wrap: anywhere;
+}
+
 .entry-list strong {
   display: block;
   overflow-wrap: anywhere;

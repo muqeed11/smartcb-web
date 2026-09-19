@@ -109,6 +109,7 @@ function SignedInApp({ session, onLogout, onSwitchAccount, onAuthExpired }: Sign
         onChangeSheet={book.closeBook}
         onSelectSheet={(name) => void book.selectSheet(name)}
         onAddEntry={book.addEntry}
+        onUpdateLatest={book.updateLatest}
         onRetrySync={() => void book.retrySync()}
         onReload={() => void book.selectBook(activeId)}
         onLogout={onLogout}

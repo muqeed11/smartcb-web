@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Session } from '../auth/googleAuth'
-import { AddEntryModal } from '../components/AddEntryModal'
+import { AddEntryModal, type EntryDraft } from '../components/AddEntryModal'
 import { AppHeader } from '../components/AppHeader'
 import { DriveLoader } from '../components/DriveLoader'
 import type { SyncStatus } from '../hooks/useCashBook'
@@ -18,7 +18,8 @@ type Props = {
   loadError: string | null
   onChangeSheet: () => void
   onSelectSheet: (name: string) => void
-  onAddEntry: (entry: { description: string; amount: number; kind: 'in' | 'out' }) => Promise<void>
+  onAddEntry: (entry: EntryDraft) => Promise<void>
+  onUpdateLatest: (entry: EntryDraft) => Promise<void>
   onRetrySync: () => void
   onReload: () => void
   onLogout: () => void
@@ -28,6 +29,18 @@ type Props = {
 function money(value: number): string {
   return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(value)
 }
+
+function entryKind(row: LedgerRow): 'in' | 'out' {
+  return row.cashOut > 0 && row.cashIn === 0 ? 'out' : 'in'
+}
+
+function entryAmount(row: LedgerRow): number {
+  return entryKind(row) === 'out' ? row.cashOut : row.cashIn
+}
+
+type ModalState =
+  | { mode: 'add'; kind: 'in' | 'out' }
+  | { mode: 'edit'; kind: 'in' | 'out'; description: string; amount: number }
 
 function syncLabel(status: SyncStatus): string {
   switch (status) {
@@ -59,12 +72,13 @@ export function LedgerPage({
   onChangeSheet,
   onSelectSheet,
   onAddEntry,
+  onUpdateLatest,
   onRetrySync,
   onReload,
   onLogout,
   onSwitchAccount,
 }: Props) {
-  const [modal, setModal] = useState<'in' | 'out' | null>(null)
+  const [modal, setModal] = useState<ModalState | null>(null)
 
   const totals = useMemo(() => {
     const cashIn = rows.reduce((sum, row) => sum + row.cashIn, 0)
@@ -74,6 +88,15 @@ export function LedgerPage({
   }, [rows])
 
   const reversed = useMemo(() => [...rows].reverse(), [rows])
+
+  function openEdit(row: LedgerRow) {
+    setModal({
+      mode: 'edit',
+      kind: entryKind(row),
+      description: row.description,
+      amount: entryAmount(row),
+    })
+  }
 
   return (
     <div className="app-shell">
@@ -148,13 +171,18 @@ export function LedgerPage({
         </section>
 
         <section className="actions">
-          <button type="button" className="btn cash" onClick={() => setModal('in')} disabled={loading}>
+          <button
+            type="button"
+            className="btn cash"
+            onClick={() => setModal({ mode: 'add', kind: 'in' })}
+            disabled={loading}
+          >
             Add cash
           </button>
           <button
             type="button"
             className="btn expense"
-            onClick={() => setModal('out')}
+            onClick={() => setModal({ mode: 'add', kind: 'out' })}
             disabled={loading}
           >
             Add expense
@@ -167,19 +195,32 @@ export function LedgerPage({
           ) : (
             <>
               <ul className="entry-list">
-                {reversed.map((row, index) => (
-                  <li key={`${row.date}-${row.description}-${index}`}>
-                    <div className="entry-copy">
-                      <strong>{row.description || '—'}</strong>
-                      <time>{row.date}</time>
-                    </div>
-                    <div className="entry-amounts">
-                      {row.cashIn > 0 ? <span className="positive">+{money(row.cashIn)}</span> : null}
-                      {row.cashOut > 0 ? <span className="negative">−{money(row.cashOut)}</span> : null}
-                      <span className="bal">Bal {money(row.balance)}</span>
-                    </div>
-                  </li>
-                ))}
+                {reversed.map((row, index) => {
+                  const isLatest = index === 0
+                  return (
+                    <li key={`${row.date}-${row.description}-${index}`}>
+                      <div className="entry-copy">
+                        <strong>{row.description || '—'}</strong>
+                        <time>{row.date}</time>
+                        {isLatest ? (
+                          <button
+                            type="button"
+                            className="btn ghost small entry-edit"
+                            onClick={() => openEdit(row)}
+                            disabled={loading}
+                          >
+                            Edit
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="entry-amounts">
+                        {row.cashIn > 0 ? <span className="positive">+{money(row.cashIn)}</span> : null}
+                        {row.cashOut > 0 ? <span className="negative">−{money(row.cashOut)}</span> : null}
+                        <span className="bal">Bal {money(row.balance)}</span>
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
               <div className="ledger-table-wrap">
                 <table className="ledger-table">
@@ -193,17 +234,34 @@ export function LedgerPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {reversed.map((row, index) => (
-                      <tr key={`${row.date}-${row.description}-${index}`}>
-                        <td>
-                          <time>{row.date}</time>
-                        </td>
-                        <td>{row.description || '—'}</td>
-                        <td className="num positive">{row.cashIn > 0 ? money(row.cashIn) : ''}</td>
-                        <td className="num negative">{row.cashOut > 0 ? money(row.cashOut) : ''}</td>
-                        <td className="num bal">{money(row.balance)}</td>
-                      </tr>
-                    ))}
+                    {reversed.map((row, index) => {
+                      const isLatest = index === 0
+                      return (
+                        <tr key={`${row.date}-${row.description}-${index}`}>
+                          <td>
+                            <time>{row.date}</time>
+                          </td>
+                          <td>
+                            <div className="desc-with-edit">
+                              <span>{row.description || '—'}</span>
+                              {isLatest ? (
+                                <button
+                                  type="button"
+                                  className="btn ghost small"
+                                  onClick={() => openEdit(row)}
+                                  disabled={loading}
+                                >
+                                  Edit
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="num positive">{row.cashIn > 0 ? money(row.cashIn) : ''}</td>
+                          <td className="num negative">{row.cashOut > 0 ? money(row.cashOut) : ''}</td>
+                          <td className="num bal">{money(row.balance)}</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -215,7 +273,13 @@ export function LedgerPage({
       {loading && !loadError ? <DriveLoader overlay label="Loading from Drive" /> : null}
 
       {modal ? (
-        <AddEntryModal kind={modal} onClose={() => setModal(null)} onSave={onAddEntry} />
+        <AddEntryModal
+          kind={modal.kind}
+          mode={modal.mode}
+          initial={modal.mode === 'edit' ? { description: modal.description, amount: modal.amount } : undefined}
+          onClose={() => setModal(null)}
+          onSave={modal.mode === 'edit' ? onUpdateLatest : onAddEntry}
+        />
       ) : null}
     </div>
   )
