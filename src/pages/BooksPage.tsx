@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Session } from '../auth/googleAuth'
 import { AppHeader } from '../components/AppHeader'
+import { AuthExpiredBanner } from '../components/AuthExpiredBanner'
 import { CreateBookModal } from '../components/CreateBookModal'
 import { DriveLoader } from '../components/DriveLoader'
 import { bookKind, isGoogleSheet, type DriveBook } from '../drive/driveApi'
@@ -12,9 +13,11 @@ type Props = {
   lastBookId: string | null
   listing: boolean
   loadError: string | null
+  authExpired: boolean
   onSelect: (fileId: string) => void
   onCreate: (name: string) => Promise<void>
   onImportFromDrive: () => Promise<void>
+  onReconnect: () => Promise<void>
   onReload: () => void
   onLogout: () => void
   onSwitchAccount: () => void
@@ -34,9 +37,11 @@ export function BooksPage({
   lastBookId,
   listing,
   loadError,
+  authExpired,
   onSelect,
   onCreate,
   onImportFromDrive,
+  onReconnect,
   onReload,
   onLogout,
   onSwitchAccount,
@@ -58,6 +63,8 @@ export function BooksPage({
         <section className="books-intro">
           <p className="lede">Sheets from the SmartCB folder of your Google Drive.</p>
         </section>
+
+        {authExpired ? <AuthExpiredBanner onReconnect={onReconnect} /> : null}
 
         {loadError ? (
           <div className="banner error">
@@ -113,7 +120,7 @@ export function BooksPage({
                   type="button"
                   className="book-card"
                   onClick={() => onSelect(book.id)}
-                  disabled={listing}
+                  disabled={listing && books.length === 0}
                 >
                   <span
                     className={isGoogleSheet(book.mimeType) ? 'book-icon google' : 'book-icon'}
@@ -135,7 +142,7 @@ export function BooksPage({
         )}
       </main>
 
-      {listing && !loadError ? <DriveLoader overlay label="Loading from Drive" /> : null}
+      {listing && books.length === 0 && !loadError ? <DriveLoader overlay label="Loading from Drive" /> : null}
 
       {createOpen ? (
         <CreateBookModal busy={listing} onClose={() => setCreateOpen(false)} onCreate={onCreate} />

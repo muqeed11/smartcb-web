@@ -539,6 +539,14 @@ select {
   background: #f8e8e6;
 }
 
+.banner > div {
+  min-width: 0;
+}
+
+.banner p {
+  margin: 0;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

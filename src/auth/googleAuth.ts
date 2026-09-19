@@ -184,16 +184,7 @@ export async function signIn(prompt: Exclude<TokenPrompt, 'none'> = 'select_acco
 
 export async function restoreSession(): Promise<Session | null> {
   if (!restorePromise) {
-    restorePromise = (async () => {
-      const existing = getSession()
-      if (!existing) return null
-      if (isTokenFresh(existing)) return existing
-      try {
-        return await obtainSession('none', existing)
-      } catch {
-        return null
-      }
-    })()
+    restorePromise = Promise.resolve(getSession())
   }
   return restorePromise
 }
@@ -220,11 +211,13 @@ export async function switchAccount(): Promise<Session> {
   return signIn('select_account')
 }
 
-export async function ensureFreshToken(): Promise<Session> {
+export async function ensureFreshToken(options?: { interactive?: boolean }): Promise<Session> {
   const existing = getSession()
-  if (existing && isTokenFresh(existing, 60_000)) return existing
+  if (!existing?.accessToken) throw new AuthExpiredError()
+  if (isTokenFresh(existing)) return existing
+  if (!options?.interactive) throw new AuthExpiredError()
   try {
-    return await obtainSession('none', existing)
+    return await obtainSession(existing.email ? '' : 'select_account', existing)
   } catch {
     throw new AuthExpiredError()
   }

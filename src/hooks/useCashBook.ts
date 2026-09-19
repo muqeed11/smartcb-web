@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AuthExpiredError, ensureFreshToken, type Session } from '../auth/googleAuth'
-import { getCachedBook, saveCachedBook } from '../db/localDb'
+import { AuthExpiredError, ensureFreshToken, signIn, type Session } from '../auth/googleAuth'
+import { getCachedBook, listCachedBooks, saveCachedBook, type CachedBook } from '../db/localDb'
 import {
   createBook,
   downloadBook,
@@ -25,9 +25,32 @@ import {
 export type SyncStatus = 'idle' | 'local' | 'syncing' | 'synced' | 'offline' | 'error'
 
 const LAST_BOOK_KEY = 'smartcb.lastBookId'
+const CATALOG_KEY = 'smartcb.catalog.v1'
+
+type BookCatalog = { folderId: string; books: DriveBook[] }
 
 function lastBookKey(email: string): string {
   return `${LAST_BOOK_KEY}.${email}`
+}
+
+function catalogKey(email: string): string {
+  return `${CATALOG_KEY}.${email}`
+}
+
+function loadCatalog(email: string): BookCatalog | null {
+  try {
+    const raw = localStorage.getItem(catalogKey(email))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as BookCatalog
+    if (!parsed.folderId || !Array.isArray(parsed.books)) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function saveCatalog(email: string, folderId: string, books: DriveBook[]): void {
+  localStorage.setItem(catalogKey(email), JSON.stringify({ folderId, books }))
 }
 
 function pickedKey(email: string): string {
@@ -71,17 +94,23 @@ function withXlsx(name: string): string {
   return /\.(xlsx|xls)$/i.test(trimmed) ? trimmed.replace(/\.xls$/i, '.xlsx') : `${trimmed}.xlsx`
 }
 
-export function useCashBook(session: Session | null, onAuthExpired: () => void) {
-  const [books, setBooks] = useState<DriveBook[]>([])
-  const [folderId, setFolderId] = useState<string | null>(null)
+export function useCashBook(session: Session | null, onAuthExpired?: () => void) {
+  const email = session?.email
+  const initialCatalog = email ? loadCatalog(email) : null
+
+  const [books, setBooks] = useState<DriveBook[]>(initialCatalog?.books ?? [])
+  const [folderId, setFolderId] = useState<string | null>(initialCatalog?.folderId ?? null)
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [lastBookId, setLastBookId] = useState<string | null>(null)
+  const [lastBookId, setLastBookId] = useState<string | null>(() =>
+    email ? localStorage.getItem(lastBookKey(email)) : null,
+  )
   const [rows, setRows] = useState<LedgerRow[]>([])
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
   const [syncError, setSyncError] = useState<string | null>(null)
-  const [listing, setListing] = useState(true)
+  const [listing, setListing] = useState(!initialCatalog?.books.length)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [authExpired, setAuthExpired] = useState(false)
   const [sheets, setSheets] = useState<string[]>([])
   const [activeSheet, setActiveSheet] = useState<string | null>(null)
 
@@ -90,6 +119,7 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
   const folderRef = useRef<string | null>(null)
   const activeRef = useRef<string | null>(null)
   const sheetRef = useRef<string | null>(null)
+  const sheetsRef = useRef<string[]>([])
   const sourceRef = useRef<ArrayBuffer | null>(null)
   const timerRef = useRef<number | null>(null)
   const onAuthExpiredRef = useRef(onAuthExpired)
@@ -99,6 +129,7 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
   folderRef.current = folderId
   activeRef.current = activeId
   sheetRef.current = activeSheet
+  sheetsRef.current = sheets
   onAuthExpiredRef.current = onAuthExpired
 
   const rememberBook = useCallback((email: string, fileId: string) => {
@@ -108,7 +139,8 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
 
   const handleAuthError = useCallback((error: unknown) => {
     if (error instanceof DriveAuthError || error instanceof AuthExpiredError) {
-      onAuthExpiredRef.current()
+      setAuthExpired(true)
+      onAuthExpiredRef.current?.()
       return true
     }
     return false
@@ -129,12 +161,13 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
         dirty,
         lastSyncedAt,
         sheetName: sheetRef.current ?? undefined,
+        sheets: sheetsRef.current,
       })
     },
     [session?.email],
   )
 
-  const pushToDrive = useCallback(async (): Promise<boolean> => {
+  const pushToDrive = useCallback(async (interactive = false): Promise<boolean> => {
     const fileId = activeRef.current
     if (!fileId || !navigator.onLine) {
       if (!navigator.onLine) setSyncStatus('offline')
@@ -143,7 +176,7 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
     setSyncStatus('syncing')
     setSyncError(null)
     try {
-      const fresh = await ensureFreshToken()
+      const fresh = await ensureFreshToken({ interactive })
       const book = booksRef.current.find((item) => item.id === fileId)
       if (!book) return false
       sourceRef.current = await uploadBook(
@@ -157,9 +190,13 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
       )
       await persistLocal(fileId, rowsRef.current, false, Date.now())
       setSyncStatus('synced')
+      setAuthExpired(false)
       return true
     } catch (error) {
-      if (handleAuthError(error)) return false
+      if (handleAuthError(error)) {
+        setSyncStatus('offline')
+        return false
+      }
       setSyncStatus('error')
       setSyncError(error instanceof Error ? error.message : 'Could not sync to Drive')
       return false
@@ -173,9 +210,26 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
     }, 1500)
   }, [pushToDrive])
 
+  const applyCachedLedger = useCallback((cached: CachedBook) => {
+    const sheet = cached.sheetName ?? 'Ledger'
+    const names = cached.sheets?.length ? cached.sheets : [sheet]
+    setSheets(names)
+    setActiveSheet(sheet)
+    sheetRef.current = sheet
+    setRows(cached.rows)
+    sourceRef.current = bytesToArrayBuffer(serializeWorkbook(cached.rows, null, sheet))
+    setSyncStatus(cached.dirty ? 'local' : 'offline')
+    if (cached.folderId) {
+      setFolderId(cached.folderId)
+      folderRef.current = cached.folderId
+    }
+  }, [])
+
   const loadBook = useCallback(
     async (token: string, email: string, book: DriveBook) => {
       const cached = await getCachedBook(book.id)
+      if (cached?.userEmail === email) applyCachedLedger(cached)
+
       const buffer = await downloadBook(token, book.id, book.mimeType)
       const names = listSheetNames(buffer)
       const preferred =
@@ -207,19 +261,66 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
         dirty: false,
         lastSyncedAt: Date.now(),
         sheetName: preferred,
+        sheets: names,
       })
       setSyncStatus('synced')
+      setAuthExpired(false)
     },
-    [scheduleSync],
+    [applyCachedLedger, scheduleSync],
+  )
+
+  const rememberCatalog = useCallback((email: string, folder: string, listed: DriveBook[]) => {
+    setFolderId(folder)
+    folderRef.current = folder
+    setBooks(listed)
+    booksRef.current = listed
+    saveCatalog(email, folder, listed)
+    setLastBookId(localStorage.getItem(lastBookKey(email)))
+    setAuthExpired(false)
+  }, [])
+
+  const hydrateLocal = useCallback(async (email: string): Promise<boolean> => {
+    setLastBookId(localStorage.getItem(lastBookKey(email)))
+    const catalog = loadCatalog(email)
+    if (catalog) {
+      setFolderId(catalog.folderId)
+      folderRef.current = catalog.folderId
+      setBooks(catalog.books)
+      booksRef.current = catalog.books
+      return catalog.books.length > 0
+    }
+    const cached = await listCachedBooks(email)
+    if (cached.length === 0) return false
+    const folder = cached.find((item) => item.folderId)?.folderId ?? ''
+    const listed = cached.map((item) => ({ id: item.fileId, name: item.name }))
+    if (folder) {
+      setFolderId(folder)
+      folderRef.current = folder
+    }
+    setBooks(listed)
+    booksRef.current = listed
+    return true
+  }, [])
+
+  const refreshFromDrive = useCallback(
+    async (interactive = false) => {
+      const fresh = await ensureFreshToken({ interactive })
+      const folder = await findOrCreateFolder(fresh.accessToken)
+      const listed = mergeBooks(
+        await listBooks(fresh.accessToken, folder),
+        await loadPickedBooks(fresh.accessToken, fresh.email),
+      )
+      rememberCatalog(fresh.email, folder, listed)
+      return fresh
+    },
+    [rememberCatalog],
   )
 
   const bootstrap = useCallback(async () => {
-    if (!session) {
+    if (!email) {
       setListing(false)
       return
     }
-    setListing(true)
-    setLoadError(null)
     setActiveId(null)
     activeRef.current = null
     setRows([])
@@ -227,25 +328,20 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
     setActiveSheet(null)
     sheetRef.current = null
     sourceRef.current = null
+    setLoadError(null)
+    const hadCache = await hydrateLocal(email)
+    setListing(!hadCache)
     try {
-      const fresh = await ensureFreshToken()
-      const folder = await findOrCreateFolder(fresh.accessToken)
-      setFolderId(folder)
-      folderRef.current = folder
-      const listed = mergeBooks(
-        await listBooks(fresh.accessToken, folder),
-        await loadPickedBooks(fresh.accessToken, fresh.email),
-      )
-      setBooks(listed)
-      booksRef.current = listed
-      setLastBookId(localStorage.getItem(lastBookKey(fresh.email)))
+      await refreshFromDrive(false)
     } catch (error) {
       if (handleAuthError(error)) return
-      setLoadError(error instanceof Error ? error.message : 'Could not read sheets in SmartCB')
+      if (!hadCache) {
+        setLoadError(error instanceof Error ? error.message : 'Could not read sheets in SmartCB')
+      }
     } finally {
       setListing(false)
     }
-  }, [handleAuthError, session])
+  }, [email, handleAuthError, hydrateLocal, refreshFromDrive])
 
   useEffect(() => {
     void bootstrap()
@@ -274,14 +370,31 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
       if (!book) return
       setActiveId(fileId)
       activeRef.current = fileId
-      setLoading(true)
       setLoadError(null)
+      const cached = await getCachedBook(fileId)
+      const hasCache = cached?.userEmail === session.email
+      if (hasCache && cached) applyCachedLedger(cached)
+      setLoading(!hasCache)
       try {
-        const fresh = await ensureFreshToken()
+        const fresh = await ensureFreshToken({ interactive: true })
         await loadBook(fresh.accessToken, fresh.email, book)
         rememberBook(session.email, fileId)
+        setAuthExpired(false)
       } catch (error) {
-        if (handleAuthError(error)) return
+        if (hasCache) {
+          if (!handleAuthError(error)) {
+            setSyncStatus('error')
+            setSyncError(error instanceof Error ? error.message : 'Could not refresh this sheet')
+          }
+          rememberBook(session.email, fileId)
+          if (cached?.dirty) scheduleSync()
+          return
+        }
+        if (handleAuthError(error)) {
+          setActiveId(null)
+          activeRef.current = null
+          return
+        }
         setLoadError(error instanceof Error ? error.message : 'Could not open this sheet')
         setActiveId(null)
         activeRef.current = null
@@ -289,35 +402,34 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
         setLoading(false)
       }
     },
-    [handleAuthError, loadBook, rememberBook, session],
+    [applyCachedLedger, handleAuthError, loadBook, rememberBook, scheduleSync, session],
   )
 
   const createNewBook = useCallback(
     async (rawName: string) => {
       if (!session) return
-      const fresh = await ensureFreshToken()
+      const fresh = await ensureFreshToken({ interactive: true })
       const folder = folderRef.current ?? (await findOrCreateFolder(fresh.accessToken))
       setFolderId(folder)
       folderRef.current = folder
       const created = await createBook(fresh.accessToken, folder, withXlsx(rawName))
       const listed = mergeBooks(booksRef.current, [created])
-      setBooks(listed)
-      booksRef.current = listed
+      rememberCatalog(fresh.email, folder, listed)
       await selectBook(created.id)
     },
-    [selectBook, session],
+    [rememberCatalog, selectBook, session],
   )
 
   const importFromDrive = useCallback(async () => {
     if (!session) return
-    const fresh = await ensureFreshToken()
+    const fresh = await ensureFreshToken({ interactive: true })
     const picked = await pickWorkbooks(fresh.accessToken)
     if (picked.length === 0) return
     savePickedIds(fresh.email, [...loadPickedIds(fresh.email), ...picked.map((book) => book.id)])
     const listed = mergeBooks(booksRef.current, picked)
-    setBooks(listed)
-    booksRef.current = listed
-  }, [session])
+    const folder = folderRef.current ?? (await findOrCreateFolder(fresh.accessToken))
+    rememberCatalog(fresh.email, folder, listed)
+  }, [rememberCatalog, session])
 
   const closeBook = useCallback(() => {
     setActiveId(null)
@@ -340,7 +452,7 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
         serializeWorkbook(rowsRef.current, sourceRef.current, sheetRef.current ?? 'Ledger'),
       )
       await persistLocal(fileId, rowsRef.current, true, null)
-      const uploaded = await pushToDrive()
+      const uploaded = await pushToDrive(true)
       setActiveSheet(name)
       sheetRef.current = name
       const parsed = parseWorkbook(sourceRef.current, name)
@@ -405,6 +517,21 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
     [commitRows],
   )
 
+  const reconnect = useCallback(async () => {
+    if (!email) return
+    try {
+      await signIn('')
+    } catch {
+      await signIn('select_account')
+    }
+    setAuthExpired(false)
+    const fresh = await refreshFromDrive(false)
+    const fileId = activeRef.current
+    if (!fileId) return
+    const book = booksRef.current.find((item) => item.id === fileId)
+    if (book) await loadBook(fresh.accessToken, fresh.email, book)
+  }, [email, loadBook, refreshFromDrive])
+
   return {
     books,
     activeId,
@@ -415,6 +542,7 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
     listing,
     loading,
     loadError,
+    authExpired,
     sheets,
     activeSheet,
     selectBook,
@@ -424,7 +552,8 @@ export function useCashBook(session: Session | null, onAuthExpired: () => void) 
     closeBook,
     addEntry,
     updateLatest,
-    retrySync: pushToDrive,
+    reconnect,
+    retrySync: () => pushToDrive(true),
     reload: bootstrap,
   }
 }

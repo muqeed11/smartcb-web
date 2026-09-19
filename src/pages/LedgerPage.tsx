@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Session } from '../auth/googleAuth'
 import { AddEntryModal, type EntryDraft } from '../components/AddEntryModal'
 import { AppHeader } from '../components/AppHeader'
+import { AuthExpiredBanner } from '../components/AuthExpiredBanner'
 import { DriveLoader } from '../components/DriveLoader'
 import type { SyncStatus } from '../hooks/useCashBook'
 import { bookLabel, type LedgerRow } from '../ledger/excel'
@@ -16,10 +17,12 @@ type Props = {
   syncError: string | null
   loading: boolean
   loadError: string | null
+  authExpired: boolean
   onChangeSheet: () => void
   onSelectSheet: (name: string) => void
   onAddEntry: (entry: EntryDraft) => Promise<void>
   onUpdateLatest: (entry: EntryDraft) => Promise<void>
+  onReconnect: () => Promise<void>
   onRetrySync: () => void
   onReload: () => void
   onLogout: () => void
@@ -69,10 +72,12 @@ export function LedgerPage({
   syncError,
   loading,
   loadError,
+  authExpired,
   onChangeSheet,
   onSelectSheet,
   onAddEntry,
   onUpdateLatest,
+  onReconnect,
   onRetrySync,
   onReload,
   onLogout,
@@ -117,6 +122,8 @@ export function LedgerPage({
       />
 
       <main className="ledger">
+        {authExpired ? <AuthExpiredBanner onReconnect={onReconnect} /> : null}
+
         {loadError ? (
           <div className="banner error">
             <p>{loadError}</p>
@@ -270,7 +277,7 @@ export function LedgerPage({
         </section>
       </main>
 
-      {loading && !loadError ? <DriveLoader overlay label="Loading from Drive" /> : null}
+      {loading && rows.length === 0 && !loadError ? <DriveLoader overlay label="Loading from Drive" /> : null}
 
       {modal ? (
         <AddEntryModal

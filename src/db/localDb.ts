@@ -10,6 +10,7 @@ export type CachedBook = {
   dirty: boolean
   lastSyncedAt: number | null
   sheetName?: string
+  sheets?: string[]
 }
 
 class SmartCBDatabase extends Dexie {
@@ -27,6 +28,10 @@ export const db = new SmartCBDatabase()
 
 export async function getCachedBook(fileId: string): Promise<CachedBook | undefined> {
   return db.books.get(fileId)
+}
+
+export async function listCachedBooks(email: string): Promise<CachedBook[]> {
+  return db.books.where('userEmail').equals(email).toArray()
 }
 
 export async function saveCachedBook(book: CachedBook): Promise<void> {

@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
-import { clearSession, logout, restoreSession, switchAccount, type Session } from './auth/googleAuth'
+import { lazy, Suspense, useState } from 'react'
+import { getSession, logout, switchAccount, type Session } from './auth/googleAuth'
 import { DriveLoader } from './components/DriveLoader'
 import { useCashBook } from './hooks/useCashBook'
 import { BooksPage } from './pages/BooksPage'
@@ -11,21 +11,7 @@ const LedgerPage = lazy(async () => {
 })
 
 export default function App() {
-  const [session, setSession] = useState<Session | null>(null)
-  const [booting, setBooting] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    void restoreSession().then((restored) => {
-      if (!cancelled) {
-        setSession(restored)
-        setBooting(false)
-      }
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const [session, setSession] = useState<Session | null>(() => getSession())
 
   async function handleLogout() {
     await logout()
@@ -41,10 +27,6 @@ export default function App() {
     }
   }
 
-  if (booting) {
-    return <DriveLoader overlay label="Opening SmartCB" />
-  }
-
   if (!session) {
     return <LoginPage onSignedIn={setSession} />
   }
@@ -54,10 +36,7 @@ export default function App() {
       session={session}
       onLogout={() => void handleLogout()}
       onSwitchAccount={() => void handleSwitch()}
-      onAuthExpired={() => {
-        clearSession()
-        setSession(null)
-      }}
+      onSession={setSession}
     />
   )
 }
@@ -66,13 +45,19 @@ type SignedInProps = {
   session: Session
   onLogout: () => void
   onSwitchAccount: () => void
-  onAuthExpired: () => void
+  onSession: (session: Session) => void
 }
 
-function SignedInApp({ session, onLogout, onSwitchAccount, onAuthExpired }: SignedInProps) {
-  const book = useCashBook(session, onAuthExpired)
+function SignedInApp({ session, onLogout, onSwitchAccount, onSession }: SignedInProps) {
+  const book = useCashBook(session)
   const activeId = book.activeId
   const activeBook = book.books.find((item) => item.id === activeId)
+
+  async function handleReconnect() {
+    await book.reconnect()
+    const next = getSession()
+    if (next) onSession(next)
+  }
 
   if (!activeId) {
     return (
@@ -82,9 +67,11 @@ function SignedInApp({ session, onLogout, onSwitchAccount, onAuthExpired }: Sign
         lastBookId={book.lastBookId}
         listing={book.listing}
         loadError={book.loadError}
+        authExpired={book.authExpired}
         onSelect={(fileId) => void book.selectBook(fileId)}
         onCreate={book.createNewBook}
         onImportFromDrive={book.importFromDrive}
+        onReconnect={handleReconnect}
         onReload={() => void book.reload()}
         onLogout={onLogout}
         onSwitchAccount={onSwitchAccount}
@@ -106,10 +93,12 @@ function SignedInApp({ session, onLogout, onSwitchAccount, onAuthExpired }: Sign
         syncError={book.syncError}
         loading={book.loading}
         loadError={book.loadError}
+        authExpired={book.authExpired}
         onChangeSheet={book.closeBook}
         onSelectSheet={(name) => void book.selectSheet(name)}
         onAddEntry={book.addEntry}
         onUpdateLatest={book.updateLatest}
+        onReconnect={handleReconnect}
         onRetrySync={() => void book.retrySync()}
         onReload={() => void book.selectBook(activeId)}
         onLogout={onLogout}
